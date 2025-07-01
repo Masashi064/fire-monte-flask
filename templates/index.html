@@ -3,37 +3,73 @@
 <head>
   <meta charset="UTF-8">
   <title>資産シミュレーター</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 800px;
+      margin: auto;
+      padding: 2em;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.6em;
+    }
+    input {
+      width: 150px;
+    }
+    .form-group {
+      margin-bottom: 1em;
+    }
+    #submit-btn {
+      margin-top: 1.5em;
+      font-size: 1.2em;
+      padding: 0.6em 1.5em;
+    }
+    #download-btn {
+      display: none;
+      margin-top: 1em;
+      padding: 0.5em 1em;
+    }
+  </style>
 </head>
 <body>
+  <h1>🔥 FIRE資産シミュレーター 🔥</h1>
   <form id="monte-form" action="#">
-    <label>初期資産: <input name="initial" type="number" value="10000000" /></label><br />
-    <label>年間支出: <input name="spend" type="number" value="300000" /></label><br />
-    <label>期待リターン（%）: <input name="mean" type="number" step="0.1" value="4.0" /></label><br />
-    <label>リスク（標準偏差 %）: <input name="stdev" type="number" step="0.1" value="15.0" /></label><br />
-    <label>シミュレーション年数: <input name="years" type="number" value="30" /></label><br />
-    <label>試行回数: <input name="trials" type="number" value="1000" /></label><br />
-    <label>開始年齢: <input name="age" type="number" value="60" /></label><br />
-    <label>労働収入: <input name="workIncome" type="number" value="200000" /></label><br />
-    <label>何歳まで働く: <input name="workUntil" type="number" value="65" /></label><br />
-    <label>年金収入: <input name="pensionIncome" type="number" value="240000" /></label><br />
-    <label>年金開始年齢: <input name="pensionStart" type="number" value="70" /></label><br />
-    <label>インフレ率（%）: <input name="inflation" type="number" step="0.1" value="2.0" /></label><br />
-    <button type="submit">シミュレーション実行</button>
+    <div class="form-group"><label>初期資産（万円）: <input name="initial" type="number" value="1000" /></label></div>
+    <div class="form-group"><label>年間支出（万円）: <input name="spend" type="number" value="300" /></label></div>
+    <div class="form-group"><label>期待リターン（%）: <input name="mean" type="number" step="0.1" value="4.0" /></label></div>
+    <div class="form-group"><label>リスク（標準偏差 %）: <input name="stdev" type="number" step="0.1" value="15.0" /></label></div>
+    <div class="form-group"><label>シミュレーション年数: <input name="years" type="number" value="30" /></label></div>
+    <div class="form-group"><label>試行回数: <input name="trials" type="number" value="1000" /></label></div>
+    <div class="form-group"><label>開始年齢: <input name="age" type="number" value="60" /></label></div>
+    <div class="form-group"><label>労働収入（万円）: <input name="workIncome" type="number" value="200" /></label></div>
+    <div class="form-group"><label>何歳まで働く: <input name="workUntil" type="number" value="65" /></label></div>
+    <div class="form-group"><label>年金収入（万円）: <input name="pensionIncome" type="number" value="240" /></label></div>
+    <div class="form-group"><label>年金開始年齢: <input name="pensionStart" type="number" value="70" /></label></div>
+    <div class="form-group"><label>インフレ率（%）: <input name="inflation" type="number" step="0.1" value="2.0" /></label></div>
+    <button id="submit-btn" type="submit">シミュレーション実行</button>
   </form>
 
-  <pre id="monte-result">結果がここに表示されます</pre>
-  <img id="monte-graph" style="display:none; margin-top:20px; max-width:100%;" />
+  <button id="download-btn">📥 結果をCSVでダウンロード</button>
 
+  <pre id="monte-result">結果がここに表示されます（表示まで数秒かかります）</pre>
+  <img id="monte-graph" style="display:none; margin-top:20px; max-width:100%;" />
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  const resultEl = document.getElementById('monte-result');
+  const graphEl = document.getElementById('monte-graph');
+  const downloadBtn = document.getElementById('download-btn');
+
   document.getElementById('monte-form').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const form = e.target;
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
-    for (let key in data) data[key] = parseFloat(data[key]);
+    for (let key in data) data[key] = parseFloat(data[key]) * (key === 'initial' || key === 'spend' || key === 'workIncome' || key === 'pensionIncome' ? 10000 : 1);
+
+    resultEl.innerText = '計算中...';
 
     try {
       const response = await fetch("/simulate", {
@@ -43,25 +79,44 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       if (!response.ok) throw new Error("Server error: " + response.status);
-
       const result = await response.json();
 
-      document.getElementById('monte-result').innerText =
+      resultEl.innerText =
         `資産が尽きる確率: ${result.failureRate}\n` +
         `死亡時の最大資産額: ${result.deathMax.toLocaleString()}円\n` +
         `最悪ケース試行番号: ${result.worstTrial}\n` +
         `資産が尽きた最年齢: ${result.minAge}`;
 
-      // ★ グラフを表示する処理を追加
-      const imgEl = document.getElementById('monte-graph');
-      imgEl.src = 'data:image/png;base64,' + result.graphBase64;
-      imgEl.style.display = 'block';
+      graphEl.src = 'data:image/png;base64,' + result.graphBase64;
+      graphEl.style.display = 'block';
+      downloadBtn.style.display = 'inline-block';
 
     } catch (err) {
-      document.getElementById('monte-result').innerText =
-        "エラーが発生しました: " + err.message;
+      resultEl.innerText = "エラーが発生しました: " + err.message;
     }
+  });
+
+  downloadBtn.addEventListener('click', async () => {
+    const formData = new FormData(document.getElementById('monte-form'));
+    const data = Object.fromEntries(formData.entries());
+    for (let key in data) data[key] = parseFloat(data[key]) * (key === 'initial' || key === 'spend' || key === 'workIncome' || key === 'pensionIncome' ? 10000 : 1);
+
+    const res = await fetch("/simulate_csv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "monte_result.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   });
 });
 </script>
-
+</body>
+</html>

@@ -1,8 +1,11 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file
 import numpy as np
 import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
+import csv
+import io
+
 
 app = Flask(__name__)
 
@@ -87,3 +90,63 @@ def simulate():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+from flask import send_file
+import csv
+import io
+
+@app.route("/simulate_csv", methods=["POST"])
+def simulate_csv():
+    data = request.get_json()
+
+    initial = float(data["initial"])
+    spend = float(data["spend"])
+    mean = float(data["mean"]) / 100
+    stdev = float(data["stdev"]) / 100
+    years = int(data["years"])
+    trials = int(data["trials"])
+    age = int(data["age"])
+    work_income = float(data["workIncome"])
+    work_until = int(data["workUntil"])
+    pension_income = float(data["pensionIncome"])
+    pension_start = int(data["pensionStart"])
+    inflation = float(data["inflation"]) / 100
+
+    results = np.zeros((trials, years))
+
+    for t in range(trials):
+        assets = initial
+        yearly_assets = []
+        for y in range(years):
+            current_age = age + y
+            income = 0
+            if current_age < work_until:
+                income += work_income
+            if current_age >= pension_start:
+                income += pension_income
+
+            adjusted_spend = spend * ((1 + inflation) ** y)
+            real_return = np.random.normal(mean, stdev)
+            assets = (assets - adjusted_spend + income) * (1 + real_return)
+            yearly_assets.append(assets if assets > 0 else 0)
+
+        results[t] = yearly_assets
+
+    # CSV生成
+    output = io.StringIO()
+    writer = csv.writer(output)
+    header = ["Year"] + [f"Trial {i+1}" for i in range(trials)]
+    writer.writerow(header)
+
+    for year in range(years):
+        row = [f"Year {year+1}"] + list(results[:, year])
+        writer.writerow(row)
+
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8-sig')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name="monte_result.csv"
+    )
+
